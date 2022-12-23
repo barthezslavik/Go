@@ -21,6 +21,7 @@ type Block struct {
 	PrevBlockHash string
 	Hash          string
 	Nonce         int
+	Index         int
 }
 
 // Transaction represents a cryptocurrency transaction
@@ -42,11 +43,18 @@ type BlockChain struct {
 // NewBlock creates a new block and adds it to the chain
 func (bc *BlockChain) NewBlock(transactions []*Transaction) *Block {
 	prevBlock := bc.Blocks[len(bc.Blocks)-1]
-	newBlock := &Block{time.Now().Unix(), transactions, prevBlock.Hash, "", 0}
+	newBlock := &Block{
+		Timestamp:     time.Now().Unix(),
+		Transactions:  transactions,
+		PrevBlockHash: prevBlock.Hash,
+		Hash:          "",
+		Nonce:         0,
+		Index:         prevBlock.Index + 1,
+	}
 	pow := NewProofOfWork(newBlock)
 	nonce, hash := pow.Run()
 
-	newBlock.Hash = hash
+	newBlock.Hash = string(hash)
 	newBlock.Nonce = nonce
 
 	bc.Blocks = append(bc.Blocks, newBlock)
@@ -69,12 +77,16 @@ func (bc *BlockChain) NewTransaction(sender string, recipient string, amount int
 
 // NewBlockChain creates a new blockchain with a genesis block
 func NewBlockChain() *BlockChain {
-	return &BlockChain{[]*Block{NewGenesisBlock()}, make(map[string]Transaction)}
+	return &BlockChain{
+		Blocks:              []*Block{NewGenesisBlock()},
+		UTXOs:               make(map[string]Transaction),
+		PendingTransactions: []*Transaction{},
+	}
 }
 
 // NewGenesisBlock creates a new genesis block
 func NewGenesisBlock() *Block {
-	return &Block{time.Now().Unix(), []*Transaction{}, "", "", 0}
+	return &Block{time.Now().Unix(), []*Transaction{}, "", "", 0, 0}
 }
 
 // HashTransactions returns the hash of the transactions in a block
@@ -148,9 +160,11 @@ func (pow *ProofOfWork) Validate() bool {
 }
 
 func (pow *ProofOfWork) prepareData(nonce int) []byte {
+	prevBlockHash := []byte(pow.Block.PrevBlockHash)
+
 	data := bytes.Join(
 		[][]byte{
-			pow.Block.PrevBlockHash,
+			prevBlockHash,
 			pow.Block.HashTransactions(),
 			IntToHex(pow.Block.Timestamp),
 			IntToHex(int64(targetBits)),
